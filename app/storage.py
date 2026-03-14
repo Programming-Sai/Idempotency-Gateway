@@ -1,16 +1,24 @@
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Optional, Dict, Any
+
+class RecordStatus(str, Enum):
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 @dataclass
 class IdempotencyRecord:
     """What we store for each idempotency key"""
     request_hash: str
-    response_status: int
-    response_body: dict
-    status: str  # "processing" or "completed"
+    response_status: Optional[int]
+    response_body: Optional[dict]
+    status: RecordStatus            # processing, completed, failed
     created_at: datetime
+    updated_at: datetime
+
 
 class IdempotencyStore:
     def __init__(self):
