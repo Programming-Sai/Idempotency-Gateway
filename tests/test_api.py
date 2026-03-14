@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 from app.main import app
-from app.storage import IdempotencyStore
+from app.storage import IdempotencyStore, RecordStatus
 import threading
 import concurrent.futures
 import time
@@ -206,3 +208,61 @@ def test_wait_does_not_block_other_keys(client, fresh_store):
     
     # Total time should be ~2s, not 4s
     assert total_time < 3.0
+
+def test_ttl_expiration(client, fresh_store):
+    """Test that expired keys are treated as new requests."""
+    # Set TTL to 1 second on BOTH the store reference and the service's internal store
+    app.state.store.ttl_seconds = 1
+    app.state.payment_service.store.ttl_seconds = 1  # ← this was the missing line
+    print(f"\nTTL set to: {app.state.store.ttl_seconds}")
+
+    # First request
+    response1 = client.post(
+        "/process-payment",
+        json={"amount": 100, "currency": "GHS"},
+        headers={"Idempotency-Key": "ttl-test"}
+    )
+    assert response1.status_code == 201
+    assert response1.headers.get("x-cache-hit") is None
+    print(f"Response1: {response1.status_code}, cache-hit: {response1.headers.get('x-cache-hit')}")
+
+    # Wait for the simulated processing (2s sleep in service) to complete
+    time.sleep(2.1)
+    print("Processing complete")
+
+    # Check record after completion
+    with app.state.store._records_lock:
+        if "ttl-test" in app.state.store._records:
+            record = app.state.store._records["ttl-test"]
+            age = (datetime.now(timezone.utc) - record.created_at).total_seconds()
+            print(f"Record exists: status={record.status}, age={age:.2f}s, TTL={app.state.store.ttl_seconds}")
+        else:
+            print("Record does not exist after processing!")
+
+    # Wait for TTL to expire
+    print("Waiting for TTL to expire...")
+    time.sleep(1.1)
+
+    # Check record after TTL expiry
+    with app.state.store._records_lock:
+        if "ttl-test" in app.state.store._records:
+            record = app.state.store._records["ttl-test"]
+            age = (datetime.now(timezone.utc) - record.created_at).total_seconds()
+            print(f"After TTL: record exists, age={age:.2f}s, expired={age > app.state.store.ttl_seconds}")
+            if record.status == RecordStatus.COMPLETED and age > app.state.store.ttl_seconds:
+                print("Record should be expired but still exists!")
+        else:
+            print("After TTL: record correctly removed")
+
+    # Second request — should be treated as a brand new request, not a cache hit
+    response2 = client.post(
+        "/process-payment",
+        json={"amount": 100, "currency": "GHS"},
+        headers={"Idempotency-Key": "ttl-test"}
+    )
+    print(f"Response2: {response2.status_code}, cache-hit: {response2.headers.get('x-cache-hit')}")
+
+    assert response2.status_code == 201
+    assert response2.headers.get("x-cache-hit") is None
+    
+    

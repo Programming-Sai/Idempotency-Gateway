@@ -1,18 +1,31 @@
 from fastapi import FastAPI, Header, HTTPException, status
+from contextlib import asynccontextmanager
 from fastapi.responses import JSONResponse
 
 from app.models import PaymentRequest, PaymentResponse, ErrorResponse
 from app.services import PaymentService
 from app.storage import IdempotencyStore
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    app.state.store = IdempotencyStore()
+    app.state.payment_service = PaymentService(app.state.store)
+    yield
+    # Shutdown
+    # (cleanup if needed)
+
 # Initialize store and service
-store = IdempotencyStore()
-payment_service = PaymentService(store)
+# store = IdempotencyStore()
+# payment_service = PaymentService(store)
 app = FastAPI(
     title="Idempotency Gateway",
     description="Payment idempotency layer for FinSafe Transactions",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
+
 
 @app.get("/")
 def root():
@@ -33,7 +46,7 @@ def process_payment(
     request: PaymentRequest,
     idempotency_key: str = Header(..., alias="Idempotency-Key")
 ):
-    result = payment_service.process_payment(
+    result = app.state.payment_service.process_payment(
         idempotency_key=idempotency_key,
         amount=request.amount,
         currency=request.currency
