@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import HTTPException, status
 
 from app.storage import IdempotencyStore, IdempotencyRecord, RecordStatus
-from app.hashing import hash_request_body
+from app.hashing import generate_request_hash
 
 
 
@@ -28,7 +28,7 @@ class PaymentService:
         """
         # Generate hash of request
         request_body = {"amount": amount, "currency": currency}
-        request_hash = hash_request_body(request_body)
+        request_hash = generate_request_hash(request_body)
         
         # Get the lock for this key
         lock = await self.store.get_lock(idempotency_key)
