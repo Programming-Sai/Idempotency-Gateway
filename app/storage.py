@@ -1,51 +1,79 @@
-import asyncio
+import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, Dict, Any
 
 class RecordStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
-    FAILED = "failed"
 
 @dataclass
 class IdempotencyRecord:
-    """What we store for each idempotency key"""
     request_hash: str
     response_status: Optional[int]
     response_body: Optional[dict]
-    status: RecordStatus            # processing, completed, failed
+    status: RecordStatus
     created_at: datetime
     updated_at: datetime
 
-
 class IdempotencyStore:
     def __init__(self):
-        # Main storage: key -> record
         self._records: Dict[str, IdempotencyRecord] = {}
-        
-        # Per-key locks for race condition
-        self._locks: Dict[str, asyncio.Lock] = {}
-        
-        # Lock for modifying the _locks dict itself
-        self._dict_lock = asyncio.Lock()
+        self._events: Dict[str, threading.Event] = {}
+        self._records_lock = threading.Lock()  # Single lock for all operations
     
-    async def get_lock(self, key: str) -> asyncio.Lock:
-        """Get or create a lock for a specific key"""
-        async with self._dict_lock:
-            if key not in self._locks:
-                self._locks[key] = asyncio.Lock()
-            return self._locks[key]
+    def claim(self, key: str, request_hash: str) -> bool:
+        """
+        Try to claim this key for processing.
+        Returns True if this caller should process, False if already exists.
+        """
+        with self._records_lock:
+            if key in self._records:
+                return False
+            
+            # Create processing record
+            self._records[key] = IdempotencyRecord(
+                request_hash=request_hash,
+                response_status=None,
+                response_body=None,
+                status=RecordStatus.PROCESSING,
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc)
+            )
+            return True
     
     def get(self, key: str) -> Optional[IdempotencyRecord]:
-        """Retrieve a record if it exists"""
-        return self._records.get(key)
+        """Get record if exists"""
+        with self._records_lock:
+            return self._records.get(key)
     
-    def save(self, key: str, record: IdempotencyRecord) -> None:
-        """Store a completed record"""
-        self._records[key] = record
+    def complete(self, key: str, status_code: int, body: dict):
+        """Mark a key as completed and signal waiters"""
+        with self._records_lock:
+            if key in self._records:
+                record = self._records[key]
+                record.status = RecordStatus.COMPLETED
+                record.response_status = status_code
+                record.response_body = body
+                record.updated_at = datetime.now(timezone.utc)
+                
+                # Signal anyone waiting
+                if key in self._events:
+                    self._events[key].set()
+                    del self._events[key]
     
-    def exists(self, key: str) -> bool:
-        """Check if key has been used"""
-        return key in self._records
+    def await_completion(self, key: str, timeout: float = 30.0) -> Optional[IdempotencyRecord]:
+        """Wait for a processing key to complete. Returns completed record or None on timeout."""
+        # Get or create event
+        with self._records_lock:
+            if key not in self._events:
+                self._events[key] = threading.Event()
+            event = self._events[key]
+        
+        # Wait outside lock
+        event.wait(timeout)
+        
+        # Return whatever we have now
+        with self._records_lock:
+            return self._records.get(key)

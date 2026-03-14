@@ -15,7 +15,7 @@ app = FastAPI(
 )
 
 @app.get("/")
-async def root():
+def root():
     return {"message": "Idempotency Gateway is running", "status": "healthy"}
 
 
@@ -29,11 +29,11 @@ async def root():
         422: {"model": ErrorResponse}
     }
 )
-async def process_payment(
+def process_payment(
     request: PaymentRequest,
     idempotency_key: str = Header(..., alias="Idempotency-Key")
 ):
-    result = await payment_service.process_payment(
+    result = payment_service.process_payment(
         idempotency_key=idempotency_key,
         amount=request.amount,
         currency=request.currency
