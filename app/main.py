@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Header, HTTPException, status, Request  # Add Request here
+from fastapi import FastAPI, Header, status, Request  # Add Request here
 from contextlib import asynccontextmanager
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware  
@@ -6,37 +6,43 @@ from app.models import PaymentRequest, PaymentResponse, ErrorResponse
 from app.rate_limiting import RateLimiter
 from app.services import PaymentService
 from app.storage import IdempotencyStore
+from app.config import settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    app.state.store = IdempotencyStore()
+    app.state.store = IdempotencyStore(ttl_seconds=settings.idempotency_ttl_seconds)  
     app.state.payment_service = PaymentService(app.state.store)
+    app.state.rate_limiter = RateLimiter(max_requests=settings.rate_limit_max_requests, window_seconds=settings.rate_limit_window_seconds)
     yield
-    # Shutdown
-    # (cleanup if needed)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    app.state.store = IdempotencyStore(ttl_seconds=86400)  # 24 hours default
-    app.state.payment_service = PaymentService(app.state.store)
-    app.state.rate_limiter = RateLimiter(max_requests=5, window_seconds=60)  # 5 per minute
-    yield
-    # Shutdown (cleanup if needed)
 
 app = FastAPI(
     title="Idempotency Gateway",
-    description="Payment idempotency layer with rate limiting",
+    description="""
+    A payment processing API that guarantees exactly-once execution using idempotency keys.
+    
+    Features
+    - Idempotency: Same key + same body = cached response
+    - Conflict Detection: Same key + different body = 409 error
+    - Race Conditions: Concurrent requests handled safely
+    - Rate Limiting: 5 requests per minute per IP
+    - TTL: Keys expire after 24 hours
+    - CORS: Enabled for browser clients
+    
+    How to Use
+    1. Generate a unique UUID for each payment attempt
+    2. Send it in the `Idempotency-Key` header
+    3. Retry safely if you don't get a response
+    """,
     version="1.0.0",
     lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific domains
-    allow_credentials=True,
+    allow_origins=settings.cors_origins,  # In production, replace with specific domains
+    allow_credentials=settings.cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -77,7 +83,7 @@ async def rate_limit_middleware(request: Request, call_next):
 
 
 @app.get("/")
-def root():
+def health():
     return {"message": "Idempotency Gateway is running", "status": "healthy"}
 
 
@@ -86,10 +92,20 @@ def root():
     "/process-payment",
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Process a payment with idempotency guarantee",
+    description="""
+    Process a payment exactly once using an idempotency key.
+    
+    - First request: Processes payment, returns 201
+    - Duplicate request: Returns cached response with X-Cache-Hit: true
+    - Conflict: Same key, different body → 409 error
+    - Rate limited: Over 5 requests/minute → 429 error
+    """,
     responses={
-        409: {"model": ErrorResponse},
-        422: {"model": ErrorResponse},
-        429: {"model": ErrorResponse}
+        201: {"description": "Payment processed successfully"},
+        409: {"model": ErrorResponse, "description": "Idempotency key conflict"},
+        422: {"model": ErrorResponse, "description": "General validation error"},
+        429: {"model": ErrorResponse, "description": "Rate limit exceeded"}
     }
 )
 def process_payment(

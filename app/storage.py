@@ -2,7 +2,8 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict 
+from app.config import settings
 
 class RecordStatus(str, Enum):
     PROCESSING = "processing"
@@ -18,21 +19,19 @@ class IdempotencyRecord:
     updated_at: datetime
 
 class IdempotencyStore:
-    def __init__(self, ttl_seconds: int = 86400):
+    def __init__(self, ttl_seconds: int = settings.idempotency_ttl_seconds):
         self._records: Dict[str, IdempotencyRecord] = {}
         self._events: Dict[str, threading.Event] = {}
         self._records_lock = threading.Lock()  
         self.ttl_seconds = ttl_seconds
 
     def _is_expired(self, record: IdempotencyRecord) -> bool:
-        """Check if a completed record has expired."""
         if record.status != RecordStatus.COMPLETED:
             return False
         age = (datetime.now(timezone.utc) - record.created_at).total_seconds()
         return age > self.ttl_seconds
     
     def cleanup_expired(self):
-        """Manually trigger cleanup (can be called periodically)."""
         with self._records_lock:
             expired = [
                 key for key, record in self._records.items()
@@ -102,9 +101,8 @@ class IdempotencyStore:
                     self._events[key].set()
                     del self._events[key]
     
-    def await_completion(self, key: str, timeout: float = 30.0) -> Optional[IdempotencyRecord]:
+    def await_completion(self, key: str, timeout: float = settings.await_completion_timeout) -> Optional[IdempotencyRecord]:
         """Wait for a processing key to complete. Returns completed record or None on timeout."""
-        # Get or create event
         with self._records_lock:
             if key not in self._events:
                 self._events[key] = threading.Event()
@@ -113,6 +111,5 @@ class IdempotencyStore:
         # Wait outside lock
         event.wait(timeout)
         
-        # Return whatever we have now
         with self._records_lock:
             return self._records.get(key)

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from app.main import app
 from app.storage import IdempotencyStore, RecordStatus
-import threading
+from app.config import settings
 import concurrent.futures
 import time
 import pytest
@@ -33,7 +33,7 @@ def test_first_request_success(client, fresh_store):
     
     assert response.status_code == 201
     assert response.json() == {"message": "Charged 100 GHS", "status": "success"}
-    assert elapsed >= 2.0
+    assert elapsed >= settings.payment_processing_delay
     assert "x-cache-hit" not in response.headers
 
 def test_duplicate_request_returns_cached(client, fresh_store):

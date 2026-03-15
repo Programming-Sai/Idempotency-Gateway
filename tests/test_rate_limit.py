@@ -5,6 +5,8 @@ from app.rate_limiting import RateLimiter
 from unittest.mock import patch
 import time
 import pytest
+from app.config import settings
+
 
 @pytest.fixture
 def client():
@@ -13,9 +15,9 @@ def client():
 @pytest.fixture(autouse=True)
 def setup_rate_limiter():
     if not hasattr(app.state, 'rate_limiter'):
-        app.state.rate_limiter = RateLimiter(max_requests=5, window_seconds=60)
+        app.state.rate_limiter = RateLimiter(max_requests=settings.rate_limit_max_requests, window_seconds=settings.rate_limit_window_seconds)
     app.state.rate_limiter._requests.clear()
-    app.state.rate_limiter.window_seconds = 60  # reset window each test
+    app.state.rate_limiter.window_seconds = settings.rate_limit_window_seconds  # reset window each test
     yield
 
 
@@ -54,8 +56,6 @@ def test_rate_limit_blocks_requests_over_limit(client):
 
 
 def test_rate_limit_resets_after_window(client):
-    # app.state.rate_limiter.window_seconds = 60
-
     for i in range(5):
         response = client.post(
             "/process-payment",

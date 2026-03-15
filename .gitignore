@@ -17,3 +17,4 @@ Thumbs.db
 *.sublime-workspace
 
 *.log
+.pytest_cache/

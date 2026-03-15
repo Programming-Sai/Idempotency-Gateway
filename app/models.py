@@ -4,7 +4,7 @@ class PaymentRequest(BaseModel):
     amount: int = Field(gt=0, description="Amount in smallest currency unit")
     currency: str = Field(min_length=3, max_length=3, description="ISO currency code")
     
-    @field_validator('currency')  # V2 syntax
+    @field_validator('currency') 
     @classmethod
     def currency_must_be_uppercase(cls, v):
         return v.upper()
