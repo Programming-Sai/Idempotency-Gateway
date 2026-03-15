@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Header, HTTPException, status, Request  # Add Request here
 from contextlib import asynccontextmanager
 from fastapi.responses import JSONResponse
-
+from fastapi.middleware.cors import CORSMiddleware  
 from app.models import PaymentRequest, PaymentResponse, ErrorResponse
 from app.rate_limiting import RateLimiter
 from app.services import PaymentService
@@ -31,6 +31,14 @@ app = FastAPI(
     description="Payment idempotency layer with rate limiting",
     version="1.0.0",
     lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific domains
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
