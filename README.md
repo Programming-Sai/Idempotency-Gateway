@@ -26,26 +26,22 @@ A payment processing API that guarantees exactly-once execution using idempotenc
 FinSafe Transactions faced a critical problem: customers being double-charged when e-commerce clients retried requests after network timeouts. This service implements an idempotency layer that ensures every payment is processed **exactly once**, regardless of how many times the same request is sent.
 
 ---
-
 ## Architecture
 
-<div align="center">
+<!-- <div align="center">
 <table width="100%">
 <tr>
-<td valign="top" width="50%" height="100%">
+<td width="50%" valign="top"> -->
 
 ### Sequence Diagram
-
 ```mermaid
 sequenceDiagram
     participant Client
     participant API as Idempotency Gateway
     participant Store as Idempotency Store
     participant Processor as Payment Processor (Mock)
-
     Client->>API: POST /process-payment + Idempotency-Key
     activate API
-
     alt First Request
         API->>Store: claim(key) → True
         Store-->>API: Claimed
@@ -72,30 +68,25 @@ sequenceDiagram
         Store-->>API: Completed record (after wait)
         API-->>Client: 201 + X-Cache-Hit: true
     end
-
     deactivate API
 ```
 
-</td>
-<td valign="top" width="50%">
+<!-- </td>
+<td width="50%" valign="top"> -->
 
 ### Flowchart
-
 ```mermaid
 flowchart TD
     A[Client sends POST /process-payment] --> B{Idempotency-Key present?}
     B -- No --> C[422 Validation Error]
     B -- Yes --> D[Hash request body]
     D --> E{Key exists in store?}
-
     E -- No --> F[Claim key]
     F --> G[Process payment<br/>2s delay]
     G --> H[Store response<br/>as COMPLETED]
     H --> I[201 Created<br/>X-Cache-Hit: false]
-
     E -- Yes --> J{Hash matches?}
     J -- No --> K[409 Conflict]
-
     J -- Yes --> L{Status?}
     L -- COMPLETED --> M[Return cached response<br/>201 + X-Cache-Hit: true]
     L -- PROCESSING --> N[Wait via<br/>threading.Event]
@@ -103,10 +94,10 @@ flowchart TD
     O --> M
 ```
 
-</td>
+<!-- </td>
 </tr>
 </table>
-</div>
+</div> -->
 
 ---
 
