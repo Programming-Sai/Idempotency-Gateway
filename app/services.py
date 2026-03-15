@@ -6,8 +6,9 @@ from app.storage import IdempotencyStore, IdempotencyRecord, RecordStatus
 from app.hashing import generate_request_hash
 
 class PaymentService:
-    def __init__(self, store: IdempotencyStore):
+    def __init__(self, store: IdempotencyStore, processing_delay: float = 2.0):
         self.store = store
+        self.processing_delay = processing_delay
     
     def process_payment(
         self, 
@@ -53,7 +54,7 @@ class PaymentService:
             }
         
         # We claimed it - process payment (NO LOCK HELD)
-        time.sleep(2)
+        time.sleep(self.processing_delay)
         
         response_body = {
             "message": f"Charged {amount} {currency}",

@@ -8,16 +8,23 @@ print(f"Added {root_dir} to sys.path")
 import pytest
 from app.storage import IdempotencyStore
 from app.services import PaymentService
+from app.rate_limiting import RateLimiter
 
 @pytest.fixture(autouse=True)
 def setup_app_state():
-    """Always reinitialize app state before each test — no stale state."""
     from app.main import app
+    processing_delay = 2
+    num_requests = 5
+    window_seconds = (processing_delay * num_requests) + 10  # buffer on top
+
     store = IdempotencyStore()
-    service = PaymentService(store)
+    service = PaymentService(store, processing_delay=processing_delay)
+    rate_limiter = RateLimiter(max_requests=num_requests, window_seconds=window_seconds)
     app.state.store = store
     app.state.payment_service = service
+    app.state.rate_limiter = rate_limiter
     yield
+    
 
 @pytest.fixture
 def fresh_store(setup_app_state):
