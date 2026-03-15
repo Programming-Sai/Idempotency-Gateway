@@ -32,7 +32,7 @@ FinSafe Transactions faced a critical problem: customers being double-charged wh
 <div align="center">
 <table width="100%">
 <tr>
-<td valign="top" width="50%">
+<td valign="top" width="50%" height="100%">
 
 ### Sequence Diagram
 
