@@ -30,9 +30,9 @@ FinSafe Transactions faced a critical problem: customers being double-charged wh
 ## Architecture
 
 <div align="center">
-<table>
+<table width="100%">
 <tr>
-<td valign="top">
+<td valign="top" width="50%">
 
 ### Sequence Diagram
 
@@ -77,7 +77,7 @@ sequenceDiagram
 ```
 
 </td>
-<td valign="top">
+<td valign="top" width="50%">
 
 ### Flowchart
 
@@ -89,17 +89,17 @@ flowchart TD
     D --> E{Key exists in store?}
 
     E -- No --> F[Claim key]
-    F --> G[Process payment - 2s delay]
-    G --> H[Store response as COMPLETED]
-    H --> I[201 Created, X-Cache-Hit: false]
+    F --> G[Process payment<br/>2s delay]
+    G --> H[Store response<br/>as COMPLETED]
+    H --> I[201 Created<br/>X-Cache-Hit: false]
 
     E -- Yes --> J{Hash matches?}
     J -- No --> K[409 Conflict]
 
     J -- Yes --> L{Status?}
-    L -- COMPLETED --> M[Return cached response, 201 + X-Cache-Hit: true]
-    L -- PROCESSING --> N[Wait via threading.Event]
-    N --> O[Get completed record]
+    L -- COMPLETED --> M[Return cached response<br/>201 + X-Cache-Hit: true]
+    L -- PROCESSING --> N[Wait via<br/>threading.Event]
+    N --> O[Get completed<br/>record]
     O --> M
 ```
 
